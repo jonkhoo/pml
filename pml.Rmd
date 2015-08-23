@@ -1,0 +1,127 @@
+# Practical Machine Learning Project 
+
+## Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+## Data 
+
+The training data for this project are available here: 
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here: 
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har.
+
+We read the csv files with na.strings set to appropriate values.
+
+```{r}
+ptrain <- read.csv("pml-training.csv", na.strings = c("", "#DIV/0!", "NA"))
+ptest <- read.csv("pml-testing.csv", na.strings = c("", "#DIV/0!", "NA"))
+
+
+# Check dimensions
+dim(ptrain)
+dim(ptest)
+```
+
+## Required Libraries 
+
+```{r, warning=FALSE, message=FALSE}
+library(caret)
+library(lattice)
+library(ggplot2)
+library(randomForest)
+library(dplyr)
+```
+
+## Setting seed for replay
+
+```{r}
+set.seed(1234)
+```
+
+## Data Preprocessing
+
+We preprocess the data to remove unwanted portion before model creation.
+
+```{r}
+# 1. Remove first column
+ptrain <- ptrain[-1]
+
+# 2. Identify near zero variance predictors 
+nzv_preds <- nearZeroVar(ptrain, saveMetrics = TRUE)
+
+# 3. Remove near zero variance predictors from the dataset
+ptrain <- ptrain[, !nzv_preds$nzv]
+
+# 4. Identify predictors with 75% missing values
+missing_preds <- sapply(colnames(ptrain), 
+                        function(x) if(sum(is.na(ptrain[, x])) > 0.75*nrow(ptrain))
+                          return(TRUE)
+                        else
+                          return(FALSE)
+                        )
+
+# 5. Remove predictors with 75% missing values from training dataset
+ptrain <- ptrain[, !missing_preds]
+
+dim(ptrain)
+```
+
+## Initial Fit of Random Forest Classifier
+
+We use the Random Forest model to fit the training data set. To predict the performance of generated model, we use 10-fold cross-validation.
+
+```{r}
+modelFit <- train(classe ~ ., 
+                  method = "rf", 
+                  data = ptrain, 
+                  importance = TRUE, 
+                  trControl = trainControl(method = "cv", number = 10)
+)
+summary(modelFit)
+```
+
+## Plot the predictors' contributions to model
+
+```{r, fig.width=8, fig.height=20}
+plot(varImp(modelFit))
+```
+
+## Details of model
+
+```{r}
+modelFit$finalModel
+```
+
+We noted that the estimate of error rate of the cross-validated model as 0.04%. 
+
+## Model Prediction
+
+```{r}
+# do the prediction on the test data set
+predicted <- predict(modelFit, newdata=ptest)
+
+# print the predicted values
+print(predicted)
+```
+
+## File output
+```{r}
+# store the predicted values in separate files to be uploaded
+# function to write output file
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("./prediction/problem_id_", i, ".txt")
+    write.table(x[i], file = filename, quote = FALSE, row.names = FALSE, col.names = FALSE)
+  }
+}
+
+# call function for each of the predicted values
+pml_write_files(predicted)
+```
